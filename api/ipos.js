@@ -15,7 +15,8 @@ function getDb() {
       }),
     });
   }
-  return getFirestore();
+  const dbId = process.env.FIRESTORE_DATABASE_ID || '(default)';
+  return getFirestore(dbId);
 }
 
 module.exports = async function handler(req, res) {

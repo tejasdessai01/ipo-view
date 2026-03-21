@@ -15,7 +15,8 @@ function getDb() {
       }),
     });
   }
-  return getFirestore();
+  const dbId = process.env.FIRESTORE_DATABASE_ID || '(default)';
+  return getFirestore(dbId);
 }
 
 module.exports = async function handler(req, res) {
@@ -155,6 +156,11 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
     return res.json({ success: true, count: ipos.length, fetched_at: new Date().toISOString() });
   } catch (err) {
     console.error('Firestore write failed:', err);
-    return res.status(500).json({ error: 'Firestore write failed', detail: err.message });
+    const isNotFound = err.code === 5 || /NOT_FOUND/.test(err.message);
+    const hint = isNotFound
+      ? `Firestore database not found. Ensure a Firestore database exists in project "${process.env.FIREBASE_PROJECT_ID}". ` +
+        'Create one at https://console.firebase.google.com → Firestore Database → Create database.'
+      : null;
+    return res.status(500).json({ error: 'Firestore write failed', detail: err.message, hint });
   }
 };
