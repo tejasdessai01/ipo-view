@@ -22,6 +22,14 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate'); // CDN-cache for 1h
 
+  // Validate env vars early
+  const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
+    .filter(k => !process.env[k]);
+  if (missing.length) {
+    console.error('Missing env vars:', missing);
+    return res.status(500).json({ error: 'Missing environment variables', missing });
+  }
+
   try {
     const db = getDb();
 
