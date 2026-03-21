@@ -1,0 +1,26 @@
+# Cloud Build config — triggered on every push to main
+# Deploys the Cloud Function automatically from GitHub
+
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-function'
+    entrypoint: gcloud
+    args:
+      - functions
+      - deploy
+      - refresh-ipos
+      - --gen2
+      - --runtime=nodejs20
+      - --region=asia-south1
+      - --source=./cloud-function
+      - --entry-point=refreshIpos
+      - --trigger-http
+      - --allow-unauthenticated
+      - --timeout=540s
+      - --memory=512MB
+      - --set-secrets=ANTHROPIC_API_KEY=anthropic-api-key:latest
+
+timeout: '600s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
