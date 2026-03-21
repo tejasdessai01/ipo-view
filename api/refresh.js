@@ -98,7 +98,8 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        max_tokens: 16000,
+        system:     'You are a structured data API. You MUST respond with ONLY a raw JSON array — no prose, no markdown, no explanation, no text before or after the JSON. Your entire response must be parseable by JSON.parse().',
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages:   [{ role: 'user', content: prompt }],
       }),
@@ -112,7 +113,11 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
 
     const data = await r.json();
     let raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    // Strip markdown fences
     raw = raw.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '');
+    // If model wrapped JSON in prose, extract the array
+    const arrayMatch = raw.match(/\[[\s\S]*\]/);
+    if (arrayMatch) raw = arrayMatch[0];
     ipos = JSON.parse(raw);
     if (!Array.isArray(ipos)) throw new Error('Not an array');
   } catch (err) {
