@@ -81,9 +81,22 @@ Return ONLY a valid JSON array — no markdown, no backticks, no explanation.
     "issue_type": "Book Built" or "Fixed Price" or "SME",
     "registrar": "KFin Technologies",
     "lead_managers": ["Axis Capital"],
-    "min_investment": 14000
+    "min_investment": 14000,
+    "description": "2-3 sentence real factual description of what the company does, its business, and key highlights",
+    "ipo_score": 3.5,
+    "score_reasoning": "Brief 1-line reason for the score",
+    "company_url": "https://company-website.com or null",
+    "linkedin_url": "https://linkedin.com/company/... or null",
+    "drhp_url": "https://link-to-DRHP-or-RHP-filing or null"
   }
 ]
+
+Field guidelines:
+- description: Real factual info about the company — what it does, revenue, market position. No speculation.
+- ipo_score: Rate 1.0–5.0 based on: company fundamentals, sector outlook, valuation vs peers, subscription demand, GMP sentiment, promoter track record. For listed IPOs, factor in actual listing performance.
+- company_url: Official company website. null if unknown.
+- linkedin_url: Company LinkedIn page. null if unknown.
+- drhp_url: Link to DRHP/RHP on SEBI or BSE/NSE. null if unknown.
 
 Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed in the last 30 days. Aim for 15-25 entries. Real data only.`;
 
