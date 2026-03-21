@@ -21,7 +21,22 @@ function getDb() {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  const db    = getDb();
+  // Validate env vars early — missing ones cause uncaught crashes
+  const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY', 'ANTHROPIC_API_KEY']
+    .filter(k => !process.env[k]);
+  if (missing.length) {
+    console.error('Missing env vars:', missing);
+    return res.status(500).json({ error: 'Missing environment variables', missing });
+  }
+
+  let db;
+  try {
+    db = getDb();
+  } catch (err) {
+    console.error('Firebase init failed:', err);
+    return res.status(500).json({ error: 'Firebase init failed', detail: err.message });
+  }
+
   const force = req.query.force === 'true';
 
   // Skip if already fetched within 23h (prevents double-runs)
