@@ -89,7 +89,11 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
       }),
     });
 
-    if (!r.ok) throw new Error(`Anthropic HTTP ${r.status}: ${await r.text()}`);
+    if (!r.ok) {
+      const body = await r.text();
+      console.error('Anthropic error:', r.status, body);
+      throw new Error(`Anthropic HTTP ${r.status}: ${body}`);
+    }
 
     const data = await r.json();
     let raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
@@ -97,6 +101,7 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
     ipos = JSON.parse(raw);
     if (!Array.isArray(ipos)) throw new Error('Not an array');
   } catch (err) {
+    console.error('Anthropic fetch/parse failed:', err);
     return res.status(500).json({ error: 'Anthropic fetch/parse failed', detail: err.message });
   }
 
@@ -129,6 +134,7 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
 
     return res.json({ success: true, count: ipos.length, fetched_at: new Date().toISOString() });
   } catch (err) {
+    console.error('Firestore write failed:', err);
     return res.status(500).json({ error: 'Firestore write failed', detail: err.message });
   }
 };
