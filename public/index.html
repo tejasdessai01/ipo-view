@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>India IPO Dashboard</title>
+<title>IPO Watch India</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -136,26 +136,18 @@
 <div class="main" id="main-content">
   <div class="loading-state">
     <div class="spinner"></div>
-    <div class="loading-step">Loading from database…</div>
+    <div class="loading-step">Loading IPO data…</div>
   </div>
 </div>
 
 <div class="footer">
-  <span>IPO Watch India · Data refreshed daily at 6:30 AM IST · For informational purposes only</span>
+  <span>IPO Watch India · Refreshed daily at 6:30 AM IST · For informational purposes only</span>
   <span id="footer-time"></span>
 </div>
 
 <script>
-  // ─── CONFIG — fill these after GCP setup ──────────────────
-  const GCP_PROJECT_ID = 'YOUR_GCP_PROJECT_ID';
-  const FIREBASE_API_KEY = 'YOUR_FIREBASE_API_KEY';
-  // ──────────────────────────────────────────────────────────
-
-  const FIRESTORE_BASE =
-    `https://firestore.googleapis.com/v1/projects/${GCP_PROJECT_ID}/databases/(default)/documents`;
-
   let currentTab = 'all';
-  let allIpos = [];
+  let allIpos    = [];
 
   function switchTab(tab) {
     currentTab = tab;
@@ -164,60 +156,30 @@
     renderDashboard(allIpos);
   }
 
-  // Parse a Firestore REST document into a plain object
-  function parseDoc(doc) {
-    const fields = doc.fields || {};
-    const out = {};
-    for (const [key, val] of Object.entries(fields)) {
-      if      (val.stringValue  !== undefined) out[key] = val.stringValue;
-      else if (val.integerValue !== undefined) out[key] = Number(val.integerValue);
-      else if (val.doubleValue  !== undefined) out[key] = val.doubleValue;
-      else if (val.booleanValue !== undefined) out[key] = val.booleanValue;
-      else if (val.nullValue    !== undefined) out[key] = null;
-      else if (val.timestampValue !== undefined) out[key] = val.timestampValue;
-      else if (val.arrayValue   !== undefined) {
-        out[key] = (val.arrayValue.values || []).map(v =>
-          v.stringValue ?? v.integerValue ?? v.doubleValue ?? null
-        );
-      }
-    }
-    return out;
-  }
-
-  async function loadFromFirestore() {
+  async function loadData() {
     try {
-      const [ipoRes, metaRes] = await Promise.all([
-        fetch(`${FIRESTORE_BASE}/ipos?key=${FIREBASE_API_KEY}&pageSize=100`),
-        fetch(`${FIRESTORE_BASE}/meta/last_fetch?key=${FIREBASE_API_KEY}`),
-      ]);
+      const res  = await fetch('/api/ipos');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
 
-      if (!ipoRes.ok) throw new Error(`Firestore error: HTTP ${ipoRes.status}`);
+      allIpos = json.ipos || [];
+      renderDashboard(allIpos);
 
-      const ipoData  = await ipoRes.json();
-      const metaData = metaRes.ok ? await metaRes.json() : null;
-
-      const ipos = (ipoData.documents || []).map(parseDoc);
-      allIpos = ipos;
-      renderDashboard(ipos);
-
-      if (metaData?.fields?.fetched_at) {
-        const fetchedAt = new Date(metaData.fields.fetched_at.timestampValue);
-        const now = new Date();
-        const hoursAgo = Math.floor((now - fetchedAt) / 3600000);
-        const minsAgo  = Math.floor(((now - fetchedAt) % 3600000) / 60000);
-        const ageStr = hoursAgo > 0 ? `${hoursAgo}h ${minsAgo}m ago` : `${minsAgo}m ago`;
-        document.getElementById('last-updated').textContent = `DB · updated ${ageStr}`;
-        document.getElementById('footer-time').textContent =
-          `Last refresh: ${fetchedAt.toLocaleString('en-IN')}`;
+      if (json.fetched_at) {
+        const fetchedAt  = new Date(json.fetched_at);
+        const hoursAgo   = Math.floor((Date.now() - fetchedAt) / 3600000);
+        const minsAgo    = Math.floor(((Date.now() - fetchedAt) % 3600000) / 60000);
+        const ageStr     = hoursAgo > 0 ? `${hoursAgo}h ${minsAgo}m ago` : `${minsAgo}m ago`;
+        document.getElementById('last-updated').textContent = `Updated ${ageStr}`;
+        document.getElementById('footer-time').textContent  = `Last refresh: ${fetchedAt.toLocaleString('en-IN')}`;
       } else {
         document.getElementById('last-updated').textContent = 'Loaded';
       }
-
     } catch (err) {
       document.getElementById('main-content').innerHTML = `
         <div class="error-state">
-          ⚠ Could not load from database.<br>
-          <small>Make sure GCP_PROJECT_ID and FIREBASE_API_KEY are set in index.html.<br>${err.message}</small>
+          ⚠ Could not load IPO data.<br>
+          <small style="opacity:0.7;margin-top:4px;display:block">${err.message}</small>
         </div>`;
       document.getElementById('last-updated').textContent = 'Error';
     }
@@ -234,7 +196,7 @@
     document.getElementById('stat-listed').textContent   = listed.length;
 
     const gains = listed.filter(i => i.listing_gain_pct != null).map(i => Number(i.listing_gain_pct));
-    const avg   = gains.length ? gains.reduce((a,b) => a+b, 0) / gains.length : null;
+    const avg   = gains.length ? gains.reduce((a,b) => a+b,0) / gains.length : null;
     document.getElementById('stat-avg-gain').textContent =
       avg != null ? (avg >= 0 ? '+' : '') + avg.toFixed(1) + '%' : '—';
 
@@ -248,9 +210,9 @@
       if (allotment.length) sections.push({ label: 'Allotment / Listing', items: allotment });
       if (upcoming.length)  sections.push({ label: 'Upcoming',            items: upcoming });
       if (listed.length)    sections.push({ label: 'Recently Listed',     items: listed });
-    } else if (currentTab === 'open')     sections.push({ label: 'Open Now',        items: [...open, ...allotment] });
-    else if (currentTab === 'upcoming')   sections.push({ label: 'Upcoming',        items: upcoming });
-    else if (currentTab === 'listed')     sections.push({ label: 'Recently Listed', items: listed });
+    } else if (currentTab === 'open')    sections.push({ label: 'Open Now',        items: [...open, ...allotment] });
+    else if (currentTab === 'upcoming')  sections.push({ label: 'Upcoming',        items: upcoming });
+    else if (currentTab === 'listed')    sections.push({ label: 'Recently Listed', items: listed });
 
     let html = '';
     for (const s of sections) {
@@ -264,17 +226,11 @@
 
   function buildTable(items) {
     const rows = items.map(ipo => {
-      const gmpClass = ipo.gmp && ipo.gmp !== 'N/A'
-        ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
-      const subHtml = ipo.subscription_times
-        ? buildSubBar(Number(ipo.subscription_times))
-        : `<span style="font-family:var(--mono);color:var(--text-muted);">—</span>`;
-      const gainVal = ipo.listing_gain_pct != null ? Number(ipo.listing_gain_pct) : null;
-      const gainHtml = gainVal != null
-        ? `<span class="listing-gain ${gainVal >= 0 ? 'gain-pos' : 'gain-neg'}">${gainVal >= 0 ? '+' : ''}${gainVal.toFixed(1)}%</span>`
-        : `<span style="color:var(--text-muted);font-family:var(--mono);">—</span>`;
-      const issueSize = ipo.issue_size_cr != null
-        ? `₹${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '—';
+      const gmpClass  = ipo.gmp && ipo.gmp !== 'N/A' ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
+      const subHtml   = ipo.subscription_times ? buildSubBar(Number(ipo.subscription_times)) : `<span style="font-family:var(--mono);color:var(--text-muted);">—</span>`;
+      const gainVal   = ipo.listing_gain_pct != null ? Number(ipo.listing_gain_pct) : null;
+      const gainHtml  = gainVal != null ? `<span class="listing-gain ${gainVal >= 0 ? 'gain-pos' : 'gain-neg'}">${gainVal >= 0 ? '+' : ''}${gainVal.toFixed(1)}%</span>` : `<span style="color:var(--text-muted);font-family:var(--mono);">—</span>`;
+      const issueSize = ipo.issue_size_cr != null ? `₹${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '—';
 
       return `<tr>
         <td><div class="co-name">${ipo.name || '—'}</div><div class="co-sector">${ipo.sector || ''} · ${ipo.exchange || 'NSE/BSE'}</div></td>
@@ -299,14 +255,14 @@
   }
 
   function getBadge(status) {
-    const map = { open: ['badge-open','OPEN'], upcoming: ['badge-upcoming','UPCOMING'], allotment: ['badge-allot','ALLOTMENT'], listed: ['badge-listed','LISTED'] };
+    const map = { open:['badge-open','OPEN'], upcoming:['badge-upcoming','UPCOMING'], allotment:['badge-allot','ALLOTMENT'], listed:['badge-listed','LISTED'] };
     const [cls, label] = map[status] || ['badge-listed', (status||'UNKNOWN').toUpperCase()];
     return `<span class="badge ${cls}">${label}</span>`;
   }
 
   function buildSubBar(x) {
-    const pct = Math.min(x / 200 * 100, 100);
-    const cls = x >= 50 ? 'hot' : x >= 5 ? 'good' : 'cold';
+    const pct   = Math.min(x / 200 * 100, 100);
+    const cls   = x >= 50 ? 'hot' : x >= 5 ? 'good' : 'cold';
     const label = x >= 1000 ? (x/1000).toFixed(1)+'Kx' : x.toFixed(0)+'x';
     return `<div class="sub-bar-wrap"><div class="sub-bar"><div class="sub-fill ${cls}" style="width:${pct}%"></div></div><span class="sub-num">${label}</span></div>`;
   }
@@ -318,7 +274,7 @@
     return `<span class="date-chip">Listed: ${ipo.listing_date || '—'}</span>`;
   }
 
-  loadFromFirestore();
+  loadData();
 </script>
 </body>
 </html>
