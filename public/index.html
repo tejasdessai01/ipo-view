@@ -62,8 +62,20 @@
   .ipo-table tr:hover td { background: #faf9f7; }
   .ipo-table td.right { text-align: right; }
 
-  .co-name { font-weight: 600; color: var(--text); font-size: 13px; }
+  .co-name { font-weight: 600; color: var(--text); font-size: 13px; display: inline; }
+  .co-toggle { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 9px; color: var(--text-muted); cursor: pointer; margin-left: 4px; transition: transform 0.2s; vertical-align: middle; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); }
+  .co-toggle.open { transform: rotate(90deg); }
   .co-sector { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+  .co-detail { display: none; margin-top: 8px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border-light); border-radius: 5px; font-size: 11px; line-height: 1.6; color: var(--text-mid); }
+  .co-detail.open { display: block; }
+  .co-desc { margin-bottom: 6px; }
+  .co-links { display: flex; gap: 10px; margin-top: 4px; }
+  .co-links a { font-size: 10px; font-family: var(--mono); color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 3px; }
+  .co-links a:hover { text-decoration: underline; }
+  .co-score-reason { font-size: 10px; font-family: var(--mono); color: var(--text-muted); margin-top: 4px; }
+
+  .stars { display: inline-flex; gap: 1px; font-size: 13px; letter-spacing: -1px; }
+  .star-full { color: var(--amber); } .star-half { color: var(--amber); } .star-empty { color: var(--border); }
   .price-band { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; }
   .price-sub { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 1px; }
   .gmp-val { font-family: var(--mono); font-weight: 500; }
@@ -225,20 +237,48 @@
   }
 
   function buildTable(items) {
-    const rows = items.map(ipo => {
+    const rows = items.map((ipo, idx) => {
+      const uid       = 'ipo-' + Date.now() + '-' + idx;
       const gmpClass  = ipo.gmp && ipo.gmp !== 'N/A' ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
       const subHtml   = ipo.subscription_times ? buildSubBar(Number(ipo.subscription_times)) : `<span style="font-family:var(--mono);color:var(--text-muted);">—</span>`;
-      const gainVal   = ipo.listing_gain_pct != null ? Number(ipo.listing_gain_pct) : null;
-      const gainHtml  = gainVal != null ? `<span class="listing-gain ${gainVal >= 0 ? 'gain-pos' : 'gain-neg'}">${gainVal >= 0 ? '+' : ''}${gainVal.toFixed(1)}%</span>` : `<span style="color:var(--text-muted);font-family:var(--mono);">—</span>`;
       const issueSize = ipo.issue_size_cr != null ? `₹${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '—';
 
+      // Only show listing gain for listed IPOs
+      let gainHtml;
+      if (ipo.status === 'listed' && ipo.listing_gain_pct != null) {
+        const g = Number(ipo.listing_gain_pct);
+        gainHtml = `<span class="listing-gain ${g >= 0 ? 'gain-pos' : 'gain-neg'}">${g >= 0 ? '+' : ''}${g.toFixed(1)}%</span>`;
+      } else {
+        gainHtml = `<span style="color:var(--text-muted);font-family:var(--mono);">—</span>`;
+      }
+
+      // IPO Score stars
+      const scoreHtml = buildStars(ipo.ipo_score);
+
+      // Links for detail panel
+      const links = [];
+      if (ipo.company_url) links.push(`<a href="${esc(ipo.company_url)}" target="_blank" rel="noopener">Website ↗</a>`);
+      if (ipo.linkedin_url) links.push(`<a href="${esc(ipo.linkedin_url)}" target="_blank" rel="noopener">LinkedIn ↗</a>`);
+      if (ipo.drhp_url) links.push(`<a href="${esc(ipo.drhp_url)}" target="_blank" rel="noopener">DRHP/RHP ↗</a>`);
+
+      const detailHtml = `<div class="co-detail" id="${uid}">
+        ${ipo.description ? `<div class="co-desc">${esc(ipo.description)}</div>` : ''}
+        ${ipo.score_reasoning ? `<div class="co-score-reason">Score: ${esc(ipo.score_reasoning)}</div>` : ''}
+        ${links.length ? `<div class="co-links">${links.join('')}</div>` : ''}
+      </div>`;
+
       return `<tr>
-        <td><div class="co-name">${ipo.name || '—'}</div><div class="co-sector">${ipo.sector || ''} · ${ipo.exchange || 'NSE/BSE'}</div></td>
+        <td>
+          <div><span class="co-name">${esc(ipo.name || '—')}</span><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Show details">▶</span></div>
+          <div class="co-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
+          ${detailHtml}
+        </td>
         <td>${getBadge(ipo.status)}</td>
-        <td><div class="price-band">${ipo.price_band || '—'}</div><div class="price-sub">Lot: ${ipo.lot_size ? ipo.lot_size + ' shares' : '—'}</div></td>
-        <td class="right"><div style="font-family:var(--mono);font-weight:500;color:var(--text);">${issueSize}</div><div style="font-size:10px;color:var(--text-muted);font-family:var(--mono);">${ipo.issue_type || ''}</div></td>
+        <td>${scoreHtml}</td>
+        <td><div class="price-band">${esc(ipo.price_band || '—')}</div><div class="price-sub">Lot: ${ipo.lot_size ? ipo.lot_size + ' shares' : '—'}</div></td>
+        <td class="right"><div style="font-family:var(--mono);font-weight:500;color:var(--text);">${issueSize}</div><div style="font-size:10px;color:var(--text-muted);font-family:var(--mono);">${esc(ipo.issue_type || '')}</div></td>
         <td>${subHtml}</td>
-        <td><span class="gmp-val ${gmpClass}">${ipo.gmp || '—'}</span></td>
+        <td><span class="gmp-val ${gmpClass}">${esc(ipo.gmp || '—')}</span></td>
         <td>${getDateChip(ipo)}</td>
         <td>${gainHtml}</td>
       </tr>`;
@@ -246,12 +286,33 @@
 
     return `<table class="ipo-table">
       <thead><tr>
-        <th>Company</th><th>Status</th><th>Price Band</th>
+        <th>Company</th><th>Status</th><th>Score</th><th>Price Band</th>
         <th class="right">Issue Size</th><th>Subscription</th>
         <th>GMP</th><th>Key Date</th><th>Listing Gain</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+  }
+
+  function toggleDetail(id, el) {
+    const detail = document.getElementById(id);
+    detail.classList.toggle('open');
+    el.classList.toggle('open');
+  }
+
+  function buildStars(score) {
+    if (score == null) return `<span style="color:var(--text-muted);font-family:var(--mono);font-size:11px;">—</span>`;
+    const s = Math.max(0, Math.min(5, Number(score)));
+    const full = Math.floor(s);
+    const half = s - full >= 0.5 ? 1 : 0;
+    const empty = 5 - full - half;
+    return `<span class="stars" title="${s.toFixed(1)} / 5">${'<span class="star-full">★</span>'.repeat(full)}${half ? '<span class="star-half">★</span>' : ''}${'<span class="star-empty">★</span>'.repeat(empty)}</span>`;
+  }
+
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
   }
 
   function getBadge(status) {
