@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>India IPO Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --border: #e4e2dc; --border-light: #f0ede8;
+    --text: #1a1814; --text-muted: #8a8680; --text-mid: #4a4744;
+    --accent: #e85d1a; --accent-light: #fff4ee; --accent-border: #fbd0b8;
+    --green: #16a34a; --green-bg: #f0fdf4; --green-border: #bbf7d0;
+    --red: #dc2626; --red-bg: #fef2f2; --red-border: #fecaca;
+    --amber: #d97706; --amber-bg: #fffbeb; --amber-border: #fde68a;
+    --blue: #2563eb; --blue-bg: #eff6ff; --blue-border: #bfdbfe;
+    --mono: 'DM Mono', monospace; --sans: 'Sora', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; min-height: 100vh; }
+
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; height: 52px; gap: 20px; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.02em; white-space: nowrap; }
+  .logo-flag { display: flex; flex-direction: column; width: 18px; height: 13px; border-radius: 2px; overflow: hidden; border: 1px solid var(--border); }
+  .flag-stripe { flex: 1; }
+  .flag-top { background: #FF9933; } .flag-mid { background: #fff; } .flag-bot { background: #138808; }
+  .logo-divider { width: 1px; height: 20px; background: var(--border); }
+  .logo-sub { font-size: 11px; font-weight: 400; color: var(--text-muted); font-family: var(--mono); }
+
+  .tabs { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px; }
+  .tab { padding: 5px 14px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--text-muted); transition: all 0.15s; border: none; background: transparent; font-family: var(--sans); }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .tab:hover:not(.active) { color: var(--text-mid); }
+
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .live-pill { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); color: var(--text-muted); }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+  .stats-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; gap: 32px; align-items: center; }
+  .stat-item { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { font-size: 9px; font-family: var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .stat-val { font-size: 18px; font-weight: 700; letter-spacing: -0.03em; }
+  .stat-val.accent { color: var(--accent); } .stat-val.green { color: var(--green); } .stat-val.amber { color: var(--amber); }
+  .stats-divider { width: 1px; height: 30px; background: var(--border); }
+
+  .main { padding: 20px 24px; }
+  .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; gap: 16px; }
+  .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-step { font-size: 11px; font-family: var(--mono); color: var(--text-muted); }
+
+  .section-title { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-bottom: 10px; margin-top: 20px; display: flex; align-items: center; gap: 8px; }
+  .section-title:first-child { margin-top: 0; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .ipo-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+  .ipo-table th { font-size: 9px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 10px 14px; text-align: left; background: var(--bg); border-bottom: 1px solid var(--border); font-weight: 400; }
+  .ipo-table th.right { text-align: right; }
+  .ipo-table td { padding: 13px 14px; border-bottom: 1px solid var(--border-light); vertical-align: middle; font-size: 12px; color: var(--text-mid); }
+  .ipo-table tr:last-child td { border-bottom: none; }
+  .ipo-table tr:hover td { background: #faf9f7; }
+  .ipo-table td.right { text-align: right; }
+
+  .co-name { font-weight: 600; color: var(--text); font-size: 13px; }
+  .co-sector { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+  .price-band { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; }
+  .price-sub { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 1px; }
+  .gmp-val { font-family: var(--mono); font-weight: 500; }
+  .gmp-pos { color: var(--green); } .gmp-neg { color: var(--red); } .gmp-na { color: var(--text-muted); }
+
+  .sub-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .sub-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; min-width: 60px; }
+  .sub-fill { height: 100%; border-radius: 2px; }
+  .sub-fill.hot { background: var(--accent); } .sub-fill.good { background: var(--green); } .sub-fill.cold { background: var(--text-muted); }
+  .sub-num { font-family: var(--mono); font-size: 11px; color: var(--text-mid); min-width: 36px; text-align: right; }
+
+  .badge { display: inline-block; font-size: 10px; font-family: var(--mono); padding: 3px 8px; border-radius: 3px; }
+  .badge-open     { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .badge-upcoming { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+  .badge-listed   { background: var(--border-light); color: var(--text-muted); border: 1px solid var(--border); }
+  .badge-allot    { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+
+  .listing-gain { font-family: var(--mono); font-weight: 500; }
+  .gain-pos { color: var(--green); } .gain-neg { color: var(--red); }
+  .date-chip { font-family: var(--mono); font-size: 11px; color: var(--text-mid); }
+  .date-soon { color: var(--accent); font-weight: 500; }
+
+  .empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .error-state { background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 8px; padding: 20px 24px; font-size: 12px; color: var(--red); font-family: var(--mono); line-height: 1.8; }
+
+  .footer { padding: 16px 24px; border-top: 1px solid var(--border); background: var(--surface); margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-family: var(--mono); color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-flag">
+      <div class="flag-stripe flag-top"></div>
+      <div class="flag-stripe flag-mid"></div>
+      <div class="flag-stripe flag-bot"></div>
+    </div>
+    IPO Watch
+    <div class="logo-divider"></div>
+    <span class="logo-sub">India · NSE/BSE</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('all')"      id="tab-all">All</button>
+    <button class="tab"        onclick="switchTab('open')"     id="tab-open">Open Now</button>
+    <button class="tab"        onclick="switchTab('upcoming')" id="tab-upcoming">Upcoming</button>
+    <button class="tab"        onclick="switchTab('listed')"   id="tab-listed">Recently Listed</button>
+  </div>
+
+  <div class="topbar-right">
+    <div class="live-pill">
+      <div class="live-dot"></div>
+      <span id="last-updated">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-item"><span class="stat-label">Open Now</span><span class="stat-val accent" id="stat-open">—</span></div>
+  <div class="stats-divider"></div>
+  <div class="stat-item"><span class="stat-label">Coming Up</span><span class="stat-val" id="stat-upcoming">—</span></div>
+  <div class="stats-divider"></div>
+  <div class="stat-item"><span class="stat-label">Recently Listed</span><span class="stat-val green" id="stat-listed">—</span></div>
+  <div class="stats-divider"></div>
+  <div class="stat-item"><span class="stat-label">Avg Listing Gain</span><span class="stat-val green" id="stat-avg-gain">—</span></div>
+  <div class="stats-divider"></div>
+  <div class="stat-item"><span class="stat-label">Hottest Sub.</span><span class="stat-val amber" id="stat-hot">—</span></div>
+</div>
+
+<div class="main" id="main-content">
+  <div class="loading-state">
+    <div class="spinner"></div>
+    <div class="loading-step">Loading from database…</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>IPO Watch India · Data refreshed daily at 6:30 AM IST · For informational purposes only</span>
+  <span id="footer-time"></span>
+</div>
+
+<script>
+  // ─── CONFIG — fill these after GCP setup ──────────────────
+  const GCP_PROJECT_ID = 'YOUR_GCP_PROJECT_ID';
+  const FIREBASE_API_KEY = 'YOUR_FIREBASE_API_KEY';
+  // ──────────────────────────────────────────────────────────
+
+  const FIRESTORE_BASE =
+    `https://firestore.googleapis.com/v1/projects/${GCP_PROJECT_ID}/databases/(default)/documents`;
+
+  let currentTab = 'all';
+  let allIpos = [];
+
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    renderDashboard(allIpos);
+  }
+
+  // Parse a Firestore REST document into a plain object
+  function parseDoc(doc) {
+    const fields = doc.fields || {};
+    const out = {};
+    for (const [key, val] of Object.entries(fields)) {
+      if      (val.stringValue  !== undefined) out[key] = val.stringValue;
+      else if (val.integerValue !== undefined) out[key] = Number(val.integerValue);
+      else if (val.doubleValue  !== undefined) out[key] = val.doubleValue;
+      else if (val.booleanValue !== undefined) out[key] = val.booleanValue;
+      else if (val.nullValue    !== undefined) out[key] = null;
+      else if (val.timestampValue !== undefined) out[key] = val.timestampValue;
+      else if (val.arrayValue   !== undefined) {
+        out[key] = (val.arrayValue.values || []).map(v =>
+          v.stringValue ?? v.integerValue ?? v.doubleValue ?? null
+        );
+      }
+    }
+    return out;
+  }
+
+  async function loadFromFirestore() {
+    try {
+      const [ipoRes, metaRes] = await Promise.all([
+        fetch(`${FIRESTORE_BASE}/ipos?key=${FIREBASE_API_KEY}&pageSize=100`),
+        fetch(`${FIRESTORE_BASE}/meta/last_fetch?key=${FIREBASE_API_KEY}`),
+      ]);
+
+      if (!ipoRes.ok) throw new Error(`Firestore error: HTTP ${ipoRes.status}`);
+
+      const ipoData  = await ipoRes.json();
+      const metaData = metaRes.ok ? await metaRes.json() : null;
+
+      const ipos = (ipoData.documents || []).map(parseDoc);
+      allIpos = ipos;
+      renderDashboard(ipos);
+
+      if (metaData?.fields?.fetched_at) {
+        const fetchedAt = new Date(metaData.fields.fetched_at.timestampValue);
+        const now = new Date();
+        const hoursAgo = Math.floor((now - fetchedAt) / 3600000);
+        const minsAgo  = Math.floor(((now - fetchedAt) % 3600000) / 60000);
+        const ageStr = hoursAgo > 0 ? `${hoursAgo}h ${minsAgo}m ago` : `${minsAgo}m ago`;
+        document.getElementById('last-updated').textContent = `DB · updated ${ageStr}`;
+        document.getElementById('footer-time').textContent =
+          `Last refresh: ${fetchedAt.toLocaleString('en-IN')}`;
+      } else {
+        document.getElementById('last-updated').textContent = 'Loaded';
+      }
+
+    } catch (err) {
+      document.getElementById('main-content').innerHTML = `
+        <div class="error-state">
+          ⚠ Could not load from database.<br>
+          <small>Make sure GCP_PROJECT_ID and FIREBASE_API_KEY are set in index.html.<br>${err.message}</small>
+        </div>`;
+      document.getElementById('last-updated').textContent = 'Error';
+    }
+  }
+
+  function renderDashboard(ipos) {
+    const open      = ipos.filter(i => i.status === 'open');
+    const upcoming  = ipos.filter(i => i.status === 'upcoming');
+    const allotment = ipos.filter(i => i.status === 'allotment');
+    const listed    = ipos.filter(i => i.status === 'listed');
+
+    document.getElementById('stat-open').textContent     = open.length;
+    document.getElementById('stat-upcoming').textContent = upcoming.length;
+    document.getElementById('stat-listed').textContent   = listed.length;
+
+    const gains = listed.filter(i => i.listing_gain_pct != null).map(i => Number(i.listing_gain_pct));
+    const avg   = gains.length ? gains.reduce((a,b) => a+b, 0) / gains.length : null;
+    document.getElementById('stat-avg-gain').textContent =
+      avg != null ? (avg >= 0 ? '+' : '') + avg.toFixed(1) + '%' : '—';
+
+    const subs = ipos.filter(i => i.subscription_times).sort((a,b) => b.subscription_times - a.subscription_times);
+    document.getElementById('stat-hot').textContent =
+      subs.length ? Number(subs[0].subscription_times).toFixed(0) + 'x' : '—';
+
+    let sections = [];
+    if (currentTab === 'all') {
+      if (open.length)      sections.push({ label: 'Open Now',            items: open });
+      if (allotment.length) sections.push({ label: 'Allotment / Listing', items: allotment });
+      if (upcoming.length)  sections.push({ label: 'Upcoming',            items: upcoming });
+      if (listed.length)    sections.push({ label: 'Recently Listed',     items: listed });
+    } else if (currentTab === 'open')     sections.push({ label: 'Open Now',        items: [...open, ...allotment] });
+    else if (currentTab === 'upcoming')   sections.push({ label: 'Upcoming',        items: upcoming });
+    else if (currentTab === 'listed')     sections.push({ label: 'Recently Listed', items: listed });
+
+    let html = '';
+    for (const s of sections) {
+      if (!s.items.length) continue;
+      html += `<div class="section-title">${s.label} <span style="color:var(--text-mid);font-size:11px;">${s.items.length} IPO${s.items.length !== 1 ? 's' : ''}</span></div>`;
+      html += buildTable(s.items);
+    }
+    if (!html) html = `<div class="empty-state">No IPOs found for this filter.</div>`;
+    document.getElementById('main-content').innerHTML = html;
+  }
+
+  function buildTable(items) {
+    const rows = items.map(ipo => {
+      const gmpClass = ipo.gmp && ipo.gmp !== 'N/A'
+        ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
+      const subHtml = ipo.subscription_times
+        ? buildSubBar(Number(ipo.subscription_times))
+        : `<span style="font-family:var(--mono);color:var(--text-muted);">—</span>`;
+      const gainVal = ipo.listing_gain_pct != null ? Number(ipo.listing_gain_pct) : null;
+      const gainHtml = gainVal != null
+        ? `<span class="listing-gain ${gainVal >= 0 ? 'gain-pos' : 'gain-neg'}">${gainVal >= 0 ? '+' : ''}${gainVal.toFixed(1)}%</span>`
+        : `<span style="color:var(--text-muted);font-family:var(--mono);">—</span>`;
+      const issueSize = ipo.issue_size_cr != null
+        ? `₹${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '—';
+
+      return `<tr>
+        <td><div class="co-name">${ipo.name || '—'}</div><div class="co-sector">${ipo.sector || ''} · ${ipo.exchange || 'NSE/BSE'}</div></td>
+        <td>${getBadge(ipo.status)}</td>
+        <td><div class="price-band">${ipo.price_band || '—'}</div><div class="price-sub">Lot: ${ipo.lot_size ? ipo.lot_size + ' shares' : '—'}</div></td>
+        <td class="right"><div style="font-family:var(--mono);font-weight:500;color:var(--text);">${issueSize}</div><div style="font-size:10px;color:var(--text-muted);font-family:var(--mono);">${ipo.issue_type || ''}</div></td>
+        <td>${subHtml}</td>
+        <td><span class="gmp-val ${gmpClass}">${ipo.gmp || '—'}</span></td>
+        <td>${getDateChip(ipo)}</td>
+        <td>${gainHtml}</td>
+      </tr>`;
+    }).join('');
+
+    return `<table class="ipo-table">
+      <thead><tr>
+        <th>Company</th><th>Status</th><th>Price Band</th>
+        <th class="right">Issue Size</th><th>Subscription</th>
+        <th>GMP</th><th>Key Date</th><th>Listing Gain</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  function getBadge(status) {
+    const map = { open: ['badge-open','OPEN'], upcoming: ['badge-upcoming','UPCOMING'], allotment: ['badge-allot','ALLOTMENT'], listed: ['badge-listed','LISTED'] };
+    const [cls, label] = map[status] || ['badge-listed', (status||'UNKNOWN').toUpperCase()];
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function buildSubBar(x) {
+    const pct = Math.min(x / 200 * 100, 100);
+    const cls = x >= 50 ? 'hot' : x >= 5 ? 'good' : 'cold';
+    const label = x >= 1000 ? (x/1000).toFixed(1)+'Kx' : x.toFixed(0)+'x';
+    return `<div class="sub-bar-wrap"><div class="sub-bar"><div class="sub-fill ${cls}" style="width:${pct}%"></div></div><span class="sub-num">${label}</span></div>`;
+  }
+
+  function getDateChip(ipo) {
+    if (ipo.status === 'open')      return `<span class="date-chip">Closes: <strong>${ipo.close_date || '—'}</strong></span>`;
+    if (ipo.status === 'upcoming')  return `<span class="date-chip date-soon">Opens: ${ipo.open_date || '—'}</span>`;
+    if (ipo.status === 'allotment') return `<span class="date-chip">Lists: ${ipo.listing_date || '—'}</span>`;
+    return `<span class="date-chip">Listed: ${ipo.listing_date || '—'}</span>`;
+  }
+
+  loadFromFirestore();
+</script>
+</body>
+</html>
