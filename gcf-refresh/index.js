@@ -1,11 +1,10 @@
-// api/refresh.js
-// Thin proxy — forwards refresh requests to the Google Cloud Function
-// which has a 300s timeout (vs Vercel's 60s hobby limit).
-//
-// If REFRESH_GCF_URL is not set, falls back to running locally (original behaviour).
+// gcf-refresh/index.js
+// Google Cloud Function — replaces Vercel's /api/refresh
+// Deployed separately with a 300s timeout (vs Vercel's 60s hobby limit)
 
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore }                  = require('firebase-admin/firestore');
+const functions                         = require('@google-cloud/functions-framework');
 
 function getDb() {
   if (!getApps().length) {
@@ -21,29 +20,26 @@ function getDb() {
   return getFirestore(dbId);
 }
 
-module.exports = async function handler(req, res) {
+functions.http('refresh', async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  // ── If GCF URL is configured, proxy the request there ──
-  const gcfUrl = process.env.REFRESH_GCF_URL;
-  if (gcfUrl) {
-    try {
-      const params = new URLSearchParams();
-      if (req.query.force === 'true') params.set('force', 'true');
-      if (process.env.REFRESH_SECRET) params.set('key', process.env.REFRESH_SECRET);
-      const url = `${gcfUrl}?${params}`;
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return res.status(204).send('');
+  }
 
-      const gcfRes = await fetch(url, { method: 'GET' });
-      const body = await gcfRes.json();
-      return res.status(gcfRes.status).json(body);
-    } catch (err) {
-      console.error('GCF proxy failed:', err);
-      return res.status(502).json({ error: 'Cloud Function unreachable', detail: err.message });
+  // Simple auth check — reject requests without the shared secret
+  const authToken = process.env.REFRESH_SECRET;
+  if (authToken) {
+    const provided = req.query.key || req.headers['x-refresh-key'];
+    if (provided !== authToken) {
+      return res.status(403).json({ error: 'Forbidden — invalid or missing key' });
     }
   }
 
-  // ── Fallback: run refresh locally (works but may timeout on Vercel Hobby) ──
-
+  // Validate env vars early
   const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY', 'ANTHROPIC_API_KEY']
     .filter(k => !process.env[k]);
   if (missing.length) {
@@ -61,6 +57,7 @@ module.exports = async function handler(req, res) {
 
   const force = req.query.force === 'true';
 
+  // Skip if already fetched within 23h (prevents double-runs)
   if (!force) {
     try {
       const meta = await db.collection('meta').doc('last_fetch').get();
@@ -73,6 +70,7 @@ module.exports = async function handler(req, res) {
     } catch (_) {}
   }
 
+  // Build prompt
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const prompt = `You are a financial data assistant. Today is ${today}.
@@ -119,6 +117,7 @@ Field guidelines:
 
 Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed in the last 30 days. Aim for 15-25 entries. Real data only.`;
 
+  // Call Anthropic
   let ipos;
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -145,7 +144,9 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
 
     const data = await r.json();
     let raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    // Strip markdown fences
     raw = raw.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '');
+    // If model wrapped JSON in prose, extract the array
     const arrayMatch = raw.match(/\[[\s\S]*\]/);
     if (arrayMatch) raw = arrayMatch[0];
     ipos = JSON.parse(raw);
@@ -155,6 +156,7 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
     return res.status(500).json({ error: 'Anthropic fetch/parse failed', detail: err.message });
   }
 
+  // Write to Firestore
   try {
     const existing = await db.collection('ipos').get();
     const delBatch = db.batch();
@@ -188,4 +190,4 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
       : null;
     return res.status(500).json({ error: 'Firestore write failed', detail: err.message, hint });
   }
-};
+});

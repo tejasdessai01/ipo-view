@@ -3,11 +3,5 @@
     "api/refresh.js": {
       "maxDuration": 120
     }
-  },
-  "crons": [
-    {
-      "path": "/api/refresh",
-      "schedule": "0 1 * * *"
-    }
-  ]
+  }
 }
