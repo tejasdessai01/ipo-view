@@ -102,6 +102,45 @@
   .error-state { background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 8px; padding: 20px 24px; font-size: 12px; color: var(--red); font-family: var(--mono); line-height: 1.8; }
 
   .footer { padding: 16px 24px; border-top: 1px solid var(--border); background: var(--surface); margin-top: 24px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-family: var(--mono); color: var(--text-muted); }
+
+  /* ---- Mobile: cards instead of table ---- */
+  .ipo-cards { display: none; }
+
+  @media (max-width: 768px) {
+    .topbar { padding: 0 12px; gap: 8px; height: auto; min-height: 48px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+    .logo { font-size: 14px; gap: 6px; }
+    .logo-divider, .logo-sub { display: none; }
+    .tabs { order: 3; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-shrink: 0; }
+    .tab { padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+    .topbar-right { order: 2; margin-left: auto; }
+    .live-pill { font-size: 10px; }
+
+    .stats-bar { padding: 10px 12px; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .stat-item { min-width: 0; flex-shrink: 0; padding: 0 12px; }
+    .stat-item:first-child { padding-left: 0; }
+    .stat-val { font-size: 15px; }
+    .stat-label { font-size: 8px; }
+    .stats-divider { flex-shrink: 0; }
+
+    .main { padding: 12px; }
+    .section-title { font-size: 9px; margin-top: 16px; margin-bottom: 8px; }
+
+    /* Hide table, show cards */
+    .ipo-table { display: none; }
+    .ipo-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+
+    .ipo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .ipo-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .ipo-card-name { font-weight: 600; font-size: 13px; color: var(--text); flex: 1; }
+    .ipo-card-sector { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+    .ipo-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+    .ipo-card-field { display: flex; flex-direction: column; gap: 1px; }
+    .ipo-card-label { font-size: 9px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+    .ipo-card-value { font-size: 12px; color: var(--text-mid); font-family: var(--mono); }
+    .ipo-card-detail { margin-top: 8px; }
+
+    .footer { flex-direction: column; gap: 6px; text-align: center; padding: 12px; font-size: 9px; }
+  }
 </style>
 </head>
 <body>
@@ -284,6 +323,46 @@
       </tr>`;
     }).join('');
 
+    const cards = items.map((ipo, idx) => {
+      const uid       = 'ipoc-' + Date.now() + '-' + idx;
+      const gmpClass  = ipo.gmp && ipo.gmp !== 'N/A' ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
+      const subText   = ipo.subscription_times ? (Number(ipo.subscription_times) >= 1000 ? (Number(ipo.subscription_times)/1000).toFixed(1)+'Kx' : Number(ipo.subscription_times).toFixed(0)+'x') : '—';
+      const issueSize = ipo.issue_size_cr != null ? `₹${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '—';
+      let gainText = '—';
+      if (ipo.status === 'listed' && ipo.listing_gain_pct != null) {
+        const g = Number(ipo.listing_gain_pct);
+        gainText = `<span class="${g >= 0 ? 'gain-pos' : 'gain-neg'}">${g >= 0 ? '+' : ''}${g.toFixed(1)}%</span>`;
+      }
+      const scoreHtml = buildStars(ipo.ipo_score);
+      const links = [];
+      if (ipo.company_url) links.push(`<a href="${esc(ipo.company_url)}" target="_blank" rel="noopener">Website ↗</a>`);
+      if (ipo.linkedin_url) links.push(`<a href="${esc(ipo.linkedin_url)}" target="_blank" rel="noopener">LinkedIn ↗</a>`);
+      if (ipo.drhp_url) links.push(`<a href="${esc(ipo.drhp_url)}" target="_blank" rel="noopener">DRHP/RHP ↗</a>`);
+      const detailHtml = `<div class="co-detail" id="${uid}">
+        ${ipo.description ? `<div class="co-desc">${esc(ipo.description)}</div>` : ''}
+        ${ipo.score_reasoning ? `<div class="co-score-reason">Score: ${esc(ipo.score_reasoning)}</div>` : ''}
+        ${links.length ? `<div class="co-links">${links.join('')}</div>` : ''}
+      </div>`;
+      return `<div class="ipo-card">
+        <div class="ipo-card-header">
+          <div>
+            <div class="ipo-card-name">${esc(ipo.name || '—')}<span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Details">▶</span></div>
+            <div class="ipo-card-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
+          </div>
+          ${getBadge(ipo.status)}
+        </div>
+        <div class="ipo-card-grid">
+          <div class="ipo-card-field"><span class="ipo-card-label">Price Band</span><span class="ipo-card-value">${esc(ipo.price_band || '—')}</span></div>
+          <div class="ipo-card-field"><span class="ipo-card-label">Issue Size</span><span class="ipo-card-value">${issueSize}</span></div>
+          <div class="ipo-card-field"><span class="ipo-card-label">GMP</span><span class="ipo-card-value gmp-val ${gmpClass}">${esc(ipo.gmp || '—')}</span></div>
+          <div class="ipo-card-field"><span class="ipo-card-label">Subscription</span><span class="ipo-card-value">${subText}</span></div>
+          <div class="ipo-card-field"><span class="ipo-card-label">Score</span><span class="ipo-card-value">${scoreHtml}</span></div>
+          <div class="ipo-card-field"><span class="ipo-card-label">${ipo.status === 'listed' ? 'Listing Gain' : 'Key Date'}</span><span class="ipo-card-value">${ipo.status === 'listed' ? gainText : getDateChip(ipo)}</span></div>
+        </div>
+        <div class="ipo-card-detail">${detailHtml}</div>
+      </div>`;
+    }).join('');
+
     return `<table class="ipo-table">
       <thead><tr>
         <th>Company</th><th>Status</th><th>Score</th><th>Price Band</th>
@@ -291,7 +370,8 @@
         <th>GMP</th><th>Key Date</th><th>Listing Gain</th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    <div class="ipo-cards">${cards}</div>`;
   }
 
   function toggleDetail(id, el) {
