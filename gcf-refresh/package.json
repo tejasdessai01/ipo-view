@@ -1,7 +1,11 @@
 {
   "name": "ipo-refresh-gcf",
   "version": "1.0.0",
+  "main": "index.js",
   "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "functions-framework --target=refresh --port=$PORT"
+  },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.3.0",
     "firebase-admin": "^12.1.0"
