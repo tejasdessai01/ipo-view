@@ -1,7 +1,12 @@
 {
   "name": "ipo-watch-india",
   "version": "1.0.0",
+  "main": "gcf-refresh/index.js",
+  "scripts": {
+    "start": "functions-framework --source=gcf-refresh --target=refresh --port=$PORT"
+  },
   "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
     "firebase-admin": "^12.1.0"
   }
 }
