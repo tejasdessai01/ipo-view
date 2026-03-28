@@ -115,12 +115,11 @@
     .topbar-right { order: 2; margin-left: auto; }
     .live-pill { font-size: 10px; }
 
-    .stats-bar { padding: 10px 12px; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .stat-item { min-width: 0; flex-shrink: 0; padding: 0 12px; }
-    .stat-item:first-child { padding-left: 0; }
-    .stat-val { font-size: 15px; }
+    .stats-bar { padding: 12px; gap: 10px 0; flex-wrap: wrap; display: grid; grid-template-columns: repeat(3, 1fr); border-radius: 0; }
+    .stats-divider { display: none; }
+    .stat-item { padding: 6px 8px; text-align: center; align-items: center; }
+    .stat-val { font-size: 16px; }
     .stat-label { font-size: 8px; }
-    .stats-divider { flex-shrink: 0; }
 
     .main { padding: 12px; }
     .section-title { font-size: 9px; margin-top: 16px; margin-bottom: 8px; }
