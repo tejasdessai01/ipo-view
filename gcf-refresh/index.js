@@ -166,8 +166,10 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
     for (let i = 0; i < ipos.length; i += 400) {
       const batch = db.batch();
       ipos.slice(i, i + 400).forEach((ipo, j) => {
+        const slug = (ipo.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
         batch.set(db.collection('ipos').doc(`ipo_${i + j}`), {
           ...ipo,
+          slug,
           lead_managers: Array.isArray(ipo.lead_managers) ? ipo.lead_managers : [],
           updated_at:    new Date(),
         });

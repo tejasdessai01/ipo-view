@@ -63,6 +63,7 @@
   .ipo-table td.right { text-align: right; }
 
   .co-name { font-weight: 600; color: var(--text); font-size: 13px; display: inline; }
+  a.co-name:hover, a.ipo-card-name:hover { text-decoration: underline !important; color: var(--accent) !important; }
   .co-toggle { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; font-size: 9px; color: var(--text-muted); cursor: pointer; margin-left: 4px; transition: transform 0.2s; vertical-align: middle; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); }
   .co-toggle.open { transform: rotate(90deg); }
   .co-sector { font-size: 10px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
@@ -307,7 +308,7 @@
 
       return `<tr>
         <td>
-          <div><span class="co-name">${esc(ipo.name || '—')}</span><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Show details">▶</span></div>
+          <div><a href="/ipo/${toSlug(ipo.name)}" class="co-name" style="text-decoration:none;color:inherit;">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Show details">▶</span></div>
           <div class="co-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
           ${detailHtml}
         </td>
@@ -345,7 +346,7 @@
       return `<div class="ipo-card">
         <div class="ipo-card-header">
           <div>
-            <div class="ipo-card-name">${esc(ipo.name || '—')}<span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Details">▶</span></div>
+            <a href="/ipo/${toSlug(ipo.name)}" class="ipo-card-name" style="text-decoration:none;color:inherit;">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Details">▶</span>
             <div class="ipo-card-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
           </div>
           ${getBadge(ipo.status)}
@@ -392,6 +393,11 @@
     const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
+  }
+
+  function toSlug(name) {
+    if (!name) return '';
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
   function getBadge(status) {
