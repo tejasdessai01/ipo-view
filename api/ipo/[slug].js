@@ -475,6 +475,8 @@ ${faqLd ? `<script type="application/ld+json">${JSON.stringify(faqLd)}</script>`
   <span>IPO Watch India \u00b7 For informational purposes only</span>
 </div>
 
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
 </body>
 </html>`;
 }
