@@ -39,7 +39,7 @@ module.exports = async function handler(req, res) {
       db.collection('meta').doc('last_fetch').get(),
     ]);
 
-    const ipos = ipoSnap.docs.map(d => d.data());
+    const ipos = ipoSnap.docs.map(d => d.data()).filter(d => d.status !== 'archived');
     const meta = metaSnap.exists ? metaSnap.data() : null;
 
     return res.json({
