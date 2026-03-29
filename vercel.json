@@ -3,5 +3,8 @@
     "api/refresh.js": {
       "maxDuration": 120
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/ipo/:slug", "destination": "/api/ipo/:slug" }
+  ]
 }
