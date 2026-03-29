@@ -59,6 +59,7 @@
   .ipo-table th.right { text-align: right; }
   .ipo-table td { padding: 13px 14px; border-bottom: 1px solid var(--border-light); vertical-align: middle; font-size: 12px; color: var(--text-mid); }
   .ipo-table tr:last-child td { border-bottom: none; }
+  .ipo-table tr { cursor: pointer; }
   .ipo-table tr:hover td { background: #faf9f7; }
   .ipo-table td.right { text-align: right; }
 
@@ -306,9 +307,9 @@
         ${links.length ? `<div class="co-links">${links.join('')}</div>` : ''}
       </div>`;
 
-      return `<tr>
+      return `<tr onclick="window.location='/ipo/${toSlug(ipo.name)}'" data-href="/ipo/${toSlug(ipo.name)}">
         <td>
-          <div><a href="/ipo/${toSlug(ipo.name)}" class="co-name" style="text-decoration:none;color:inherit;">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Show details">▶</span></div>
+          <div><a href="/ipo/${toSlug(ipo.name)}" class="co-name" style="text-decoration:none;color:inherit;" onclick="event.stopPropagation()">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="event.stopPropagation();toggleDetail('${uid}', this)" title="Show details">▶</span></div>
           <div class="co-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
           ${detailHtml}
         </td>
@@ -343,10 +344,10 @@
         ${ipo.score_reasoning ? `<div class="co-score-reason">Score: ${esc(ipo.score_reasoning)}</div>` : ''}
         ${links.length ? `<div class="co-links">${links.join('')}</div>` : ''}
       </div>`;
-      return `<div class="ipo-card">
+      return `<div class="ipo-card" onclick="window.location='/ipo/${toSlug(ipo.name)}'" style="cursor:pointer;">
         <div class="ipo-card-header">
           <div>
-            <a href="/ipo/${toSlug(ipo.name)}" class="ipo-card-name" style="text-decoration:none;color:inherit;">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="toggleDetail('${uid}', this)" title="Details">▶</span>
+            <a href="/ipo/${toSlug(ipo.name)}" class="ipo-card-name" style="text-decoration:none;color:inherit;" onclick="event.stopPropagation()">${esc(ipo.name || '—')}</a><span class="co-toggle" onclick="event.stopPropagation();toggleDetail('${uid}', this)" title="Details">▶</span>
             <div class="ipo-card-sector">${esc(ipo.sector || '')} · ${esc(ipo.exchange || 'NSE/BSE')}</div>
           </div>
           ${getBadge(ipo.status)}

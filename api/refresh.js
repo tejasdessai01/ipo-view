@@ -139,9 +139,31 @@ Search these sources for comprehensive data:
     "registrar": "KFin Technologies",
     "lead_managers": ["Axis Capital"],
     "min_investment": 14000,
-    "description": "2-3 sentence real factual description of what the company does, its business, and key highlights",
+    "description": "2-3 sentence summary of what the company does",
+    "about": "4-6 sentence detailed company overview: business model, products/services, market position, founding year, headquarters, number of employees if known. Write naturally as editorial content.",
+    "promoters": "Key promoters/founders and their background in 1-2 sentences",
+    "strengths": ["Strength 1", "Strength 2", "Strength 3"],
+    "risks": ["Risk 1", "Risk 2", "Risk 3"],
+    "financials": {
+      "revenue_cr": 500 or null,
+      "profit_cr": 50 or null,
+      "revenue_growth_pct": 25 or null,
+      "roe_pct": 18 or null,
+      "debt_to_equity": 0.5 or null,
+      "eps": 12.5 or null,
+      "pe_ratio": 35 or null,
+      "period": "FY2024" or "9M FY2025"
+    },
+    "industry_overview": "2-3 sentences about the industry/sector this company operates in — market size, growth trends, key drivers. Factual.",
     "ipo_score": 3.5,
     "score_reasoning": "Brief 1-line reason for the score",
+    "faqs": [
+      {"q": "What is the [Company] IPO price band?", "a": "The price band is ₹X-Y per share with a lot size of Z shares."},
+      {"q": "What does [Company] do?", "a": "1-2 sentence answer about the business."},
+      {"q": "What is the [Company] IPO GMP today?", "a": "The current GMP is ₹X, indicating Y% premium."},
+      {"q": "Should I invest in [Company] IPO?", "a": "Balanced 2-sentence factual take based on fundamentals, subscription, and market sentiment. Not financial advice."},
+      {"q": "What is the [Company] IPO listing date?", "a": "The expected listing date is DD Mon YYYY on NSE/BSE."}
+    ],
     "company_url": "https://company-website.com or null",
     "linkedin_url": "https://linkedin.com/company/... or null",
     "drhp_url": "https://link-to-DRHP-or-RHP-filing or null"
@@ -150,11 +172,12 @@ Search these sources for comprehensive data:
 
 Field guidelines:
 - status: "open" = currently accepting applications. "upcoming" = dates announced but not yet open. "allotment" = closed, allotment pending or just done, not yet listed. "listed" = trading on exchange.
-- description: Real factual info about the company — what it does, revenue, market position. No speculation.
-- ipo_score: Rate 1.0–5.0 based on: company fundamentals, sector outlook, valuation vs peers, subscription demand, GMP sentiment, promoter track record. For listed IPOs, factor in actual listing performance.
-- company_url: Official company website. null if unknown.
-- linkedin_url: Company LinkedIn page. null if unknown.
-- drhp_url: Link to DRHP/RHP on SEBI or BSE/NSE. null if unknown.
+- description: Short summary for the listing card. about: Longer editorial-style overview for the detail page.
+- financials: Use data from DRHP/RHP filings or latest available annual report. null for unknown fields. Do not guess.
+- strengths/risks: Based on DRHP risk factors, market analysis, and sector dynamics. Factual, not speculative.
+- faqs: Write natural questions people would search on Google about this specific IPO. Answers should be factual and concise.
+- ipo_score: Rate 1.0–5.0 based on: company fundamentals, sector outlook, valuation vs peers, subscription demand, GMP sentiment, promoter track record.
+- All text fields should read like editorial content written by a financial journalist — not AI-generated.
 
 Include: ALL currently open IPOs, ALL IPOs in allotment phase, ALL IPOs opening in the next 30 days, ALL IPOs listed in the last 60 days. Be thorough — do not skip any. Include both mainboard and SME IPOs. Aim for 15-30 entries.${existingList}`;
 
@@ -169,7 +192,7 @@ Include: ALL currently open IPOs, ALL IPOs in allotment phase, ALL IPOs opening 
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-20250514',
-        max_tokens: 16000,
+        max_tokens: 32000,
         system:     'You are a structured data API. You MUST respond with ONLY a raw JSON array — no prose, no markdown, no explanation, no text before or after the JSON. Your entire response must be parseable by JSON.parse().',
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages:   [{ role: 'user', content: prompt }],

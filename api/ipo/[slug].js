@@ -21,7 +21,7 @@ function getDb() {
 
 function esc(str) {
   if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g, '&#39;');
 }
 
 function buildStarsHtml(score) {
@@ -43,6 +43,16 @@ function getBadgeHtml(status) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
+function toSlug(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function fmtNum(n) {
+  if (n == null) return '\u2014';
+  return Number(n).toLocaleString('en-IN');
+}
+
 module.exports = async function handler(req, res) {
   const { slug } = req.query;
   if (!slug) return res.status(400).send('Missing slug');
@@ -54,16 +64,19 @@ module.exports = async function handler(req, res) {
   let ipo;
   try {
     const db = getDb();
-    // Try exact slug match first
-    const snap = await db.collection('ipos').where('slug', '==', slug).limit(1).get();
-    if (!snap.empty) {
-      ipo = snap.docs[0].data();
+    // Slug is now the document ID
+    const doc = await db.collection('ipos').doc(slug).get();
+    if (doc.exists) {
+      ipo = doc.data();
     } else {
-      // Fallback: scan all and match by generated slug
-      const allSnap = await db.collection('ipos').get();
-      ipo = allSnap.docs.map(d => d.data()).find(d =>
-        toSlug(d.name) === slug
-      );
+      // Fallback: query by slug field or name match
+      const snap = await db.collection('ipos').where('slug', '==', slug).limit(1).get();
+      if (!snap.empty) {
+        ipo = snap.docs[0].data();
+      } else {
+        const allSnap = await db.collection('ipos').get();
+        ipo = allSnap.docs.map(d => d.data()).find(d => toSlug(d.name) === slug);
+      }
     }
   } catch (err) {
     console.error('Firestore read failed:', err);
@@ -78,13 +91,16 @@ module.exports = async function handler(req, res) {
     }));
   }
 
-  const title = `${esc(ipo.name)} IPO \u2013 Price, GMP, Dates | IPO Watch India`;
-  const description = ipo.description
-    ? esc(ipo.description).slice(0, 160)
-    : `${esc(ipo.name)} IPO details: price band ${esc(ipo.price_band || '')}, GMP ${esc(ipo.gmp || 'N/A')}, status ${esc(ipo.status || '')}. Get the latest IPO data on IPO Watch India.`;
+  const name = esc(ipo.name || 'Unknown');
+  const title = `${name} IPO \u2013 Price, GMP, Review, Dates | IPO Watch India`;
+  const description = ipo.about
+    ? esc(ipo.about).slice(0, 160)
+    : ipo.description
+      ? esc(ipo.description).slice(0, 160)
+      : `${name} IPO details: price band ${esc(ipo.price_band || '')}, GMP ${esc(ipo.gmp || 'N/A')}, status ${esc(ipo.status || '')}. Complete analysis on IPO Watch India.`;
 
   const gmpClass = ipo.gmp && ipo.gmp !== 'N/A' ? (ipo.gmp.startsWith('+') ? 'gmp-pos' : 'gmp-neg') : 'gmp-na';
-  const issueSize = ipo.issue_size_cr != null ? `\u20B9${Number(ipo.issue_size_cr).toLocaleString('en-IN')} Cr` : '\u2014';
+  const issueSize = ipo.issue_size_cr != null ? `\u20B9${fmtNum(ipo.issue_size_cr)} Cr` : '\u2014';
 
   let gainHtml = '\u2014';
   if (ipo.status === 'listed' && ipo.listing_gain_pct != null) {
@@ -108,15 +124,37 @@ module.exports = async function handler(req, res) {
 
   const canonicalUrl = `https://${req.headers.host || 'ipo-view.vercel.app'}/ipo/${slug}`;
 
-  // JSON-LD structured data
+  // Financials section
+  const fin = ipo.financials || {};
+  const hasFinancials = fin.revenue_cr || fin.profit_cr || fin.roe_pct || fin.pe_ratio;
+
+  // Strengths & Risks
+  const strengths = Array.isArray(ipo.strengths) && ipo.strengths.length ? ipo.strengths : null;
+  const risks = Array.isArray(ipo.risks) && ipo.risks.length ? ipo.risks : null;
+
+  // FAQs
+  const faqs = Array.isArray(ipo.faqs) && ipo.faqs.length ? ipo.faqs : null;
+
+  // JSON-LD: main entity
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'FinancialProduct',
     name: `${ipo.name} IPO`,
-    description: ipo.description || '',
+    description: ipo.about || ipo.description || '',
     provider: { '@type': 'Organization', name: ipo.name || '' },
     url: canonicalUrl,
   };
+
+  // JSON-LD: FAQ schema for SEO
+  const faqLd = faqs ? {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(f => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+  } : null;
 
   const body = `
     <a href="/" class="back-link">\u2190 Back to all IPOs</a>
@@ -124,7 +162,7 @@ module.exports = async function handler(req, res) {
     <div class="detail-card">
       <div class="detail-header">
         <div>
-          <h1 class="detail-title">${esc(ipo.name)}</h1>
+          <h1 class="detail-title">${name}</h1>
           <div class="detail-subtitle">${esc(ipo.sector || '')} \u00b7 ${esc(ipo.exchange || 'NSE/BSE')} \u00b7 ${esc(ipo.issue_type || '')}</div>
         </div>
         <div style="text-align:right;">
@@ -133,9 +171,10 @@ module.exports = async function handler(req, res) {
         </div>
       </div>
 
-      ${ipo.description ? `<div class="detail-desc">${esc(ipo.description)}</div>` : ''}
-      ${ipo.score_reasoning ? `<div class="detail-reasoning">${esc(ipo.score_reasoning)}</div>` : ''}
+      ${ipo.about ? `<div class="detail-desc">${esc(ipo.about)}</div>` : ipo.description ? `<div class="detail-desc">${esc(ipo.description)}</div>` : ''}
+      ${ipo.score_reasoning ? `<div class="detail-reasoning">IPO Score: ${esc(ipo.score_reasoning)}</div>` : ''}
 
+      <div class="detail-section-title">IPO Details</div>
       <div class="detail-grid">
         <div class="detail-field">
           <span class="detail-label">Price Band</span>
@@ -151,7 +190,7 @@ module.exports = async function handler(req, res) {
         </div>
         <div class="detail-field">
           <span class="detail-label">Min Investment</span>
-          <span class="detail-value">${ipo.min_investment ? '\u20B9' + Number(ipo.min_investment).toLocaleString('en-IN') : '\u2014'}</span>
+          <span class="detail-value">${ipo.min_investment ? '\u20B9' + fmtNum(ipo.min_investment) : '\u2014'}</span>
         </div>
         <div class="detail-field">
           <span class="detail-label">GMP</span>
@@ -179,6 +218,48 @@ module.exports = async function handler(req, res) {
         ${buildTimelineItem('Listing', ipo.listing_date)}
       </div>
 
+      ${ipo.promoters ? `
+      <div class="detail-section-title">Promoters</div>
+      <div class="detail-text">${esc(ipo.promoters)}</div>
+      ` : ''}
+
+      ${hasFinancials ? `
+      <div class="detail-section-title">Key Financials${fin.period ? ` <span class="fin-period">(${esc(fin.period)})</span>` : ''}</div>
+      <div class="detail-grid">
+        ${fin.revenue_cr != null ? `<div class="detail-field"><span class="detail-label">Revenue</span><span class="detail-value">\u20B9${fmtNum(fin.revenue_cr)} Cr</span></div>` : ''}
+        ${fin.profit_cr != null ? `<div class="detail-field"><span class="detail-label">Net Profit</span><span class="detail-value ${Number(fin.profit_cr) >= 0 ? 'fin-pos' : 'fin-neg'}">\u20B9${fmtNum(fin.profit_cr)} Cr</span></div>` : ''}
+        ${fin.revenue_growth_pct != null ? `<div class="detail-field"><span class="detail-label">Revenue Growth</span><span class="detail-value">${Number(fin.revenue_growth_pct).toFixed(1)}%</span></div>` : ''}
+        ${fin.roe_pct != null ? `<div class="detail-field"><span class="detail-label">ROE</span><span class="detail-value">${Number(fin.roe_pct).toFixed(1)}%</span></div>` : ''}
+        ${fin.debt_to_equity != null ? `<div class="detail-field"><span class="detail-label">Debt/Equity</span><span class="detail-value">${Number(fin.debt_to_equity).toFixed(2)}</span></div>` : ''}
+        ${fin.eps != null ? `<div class="detail-field"><span class="detail-label">EPS</span><span class="detail-value">\u20B9${Number(fin.eps).toFixed(2)}</span></div>` : ''}
+        ${fin.pe_ratio != null ? `<div class="detail-field"><span class="detail-label">P/E Ratio</span><span class="detail-value">${Number(fin.pe_ratio).toFixed(1)}x</span></div>` : ''}
+      </div>
+      ` : ''}
+
+      ${strengths || risks ? `
+      <div class="sr-columns">
+        ${strengths ? `
+        <div class="sr-col">
+          <div class="detail-section-title">Strengths</div>
+          <ul class="sr-list sr-strengths">
+            ${strengths.map(s => `<li>${esc(s)}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+        ${risks ? `
+        <div class="sr-col">
+          <div class="detail-section-title">Risks</div>
+          <ul class="sr-list sr-risks">
+            ${risks.map(r => `<li>${esc(r)}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+      </div>
+      ` : ''}
+
+      ${ipo.industry_overview ? `
+      <div class="detail-section-title">Industry Overview</div>
+      <div class="detail-text">${esc(ipo.industry_overview)}</div>
+      ` : ''}
+
       <div class="detail-section-title">Other Details</div>
       <div class="detail-grid">
         <div class="detail-field">
@@ -194,19 +275,25 @@ module.exports = async function handler(req, res) {
       ${links.length ? `<div class="detail-links">${links.join('')}</div>` : ''}
     </div>
 
+    ${faqs ? `
+    <div class="faq-section">
+      <h2 class="faq-heading">Frequently Asked Questions</h2>
+      ${faqs.map(f => `
+      <details class="faq-item">
+        <summary class="faq-q">${esc(f.q)}</summary>
+        <div class="faq-a">${esc(f.a)}</div>
+      </details>`).join('')}
+    </div>
+    ` : ''}
+
     <div class="detail-disclaimer">
-      Data sourced from public filings and market sources. Verify independently before making investment decisions.
+      Data sourced from public filings and market sources. This is not investment advice. Verify independently before making investment decisions.
     </div>`;
 
   res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(buildPage({ title, description, canonicalUrl, jsonLd, body }));
+  return res.send(buildPage({ title, description, canonicalUrl, jsonLd, faqLd, body }));
 };
-
-function toSlug(name) {
-  if (!name) return '';
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 function buildTimelineItem(label, value) {
   return `<div class="timeline-item">
@@ -218,7 +305,7 @@ function buildTimelineItem(label, value) {
   </div>`;
 }
 
-function buildPage({ title, description, canonicalUrl, jsonLd, body }) {
+function buildPage({ title, description, canonicalUrl, jsonLd, faqLd, body }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -233,6 +320,7 @@ ${description ? `<meta property="og:description" content="${description}">` : ''
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary">
 ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>` : ''}
+${faqLd ? `<script type="application/ld+json">${JSON.stringify(faqLd)}</script>` : ''}
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -265,14 +353,25 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
   .detail-subtitle { font-size: 12px; font-family: var(--mono); color: var(--text-muted); margin-top: 4px; }
   .detail-desc { font-size: 13px; line-height: 1.7; color: var(--text-mid); margin-bottom: 12px; padding: 12px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border-light); }
   .detail-reasoning { font-size: 11px; font-family: var(--mono); color: var(--text-muted); margin-bottom: 16px; padding: 8px 12px; background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 5px; }
+  .detail-text { font-size: 13px; line-height: 1.7; color: var(--text-mid); margin-bottom: 16px; }
 
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
   .detail-field { display: flex; flex-direction: column; gap: 3px; }
   .detail-label { font-size: 9px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .detail-value { font-size: 14px; font-weight: 500; color: var(--text); font-family: var(--mono); }
+  .fin-pos { color: var(--green); } .fin-neg { color: var(--red); }
+  .fin-period { font-weight: 400; font-size: 10px; color: var(--text-mid); text-transform: none; letter-spacing: 0; }
 
   .detail-section-title { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .detail-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .sr-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .sr-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .sr-list li { font-size: 12px; line-height: 1.5; color: var(--text-mid); padding: 6px 10px; border-radius: 5px; }
+  .sr-strengths li { background: var(--green-bg); border: 1px solid var(--green-border); }
+  .sr-strengths li::before { content: '\\2713 '; color: var(--green); font-weight: 600; margin-right: 4px; }
+  .sr-risks li { background: var(--red-bg); border: 1px solid var(--red-border); }
+  .sr-risks li::before { content: '\\26A0 '; color: var(--red); margin-right: 4px; }
 
   .timeline { display: flex; gap: 0; margin-bottom: 20px; position: relative; }
   .timeline::before { content: ''; position: absolute; top: 8px; left: 8px; right: 8px; height: 2px; background: var(--border); z-index: 0; }
@@ -285,6 +384,16 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
   .detail-links { display: flex; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-light); }
   .detail-links a { font-size: 12px; font-family: var(--mono); color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 3px; }
   .detail-links a:hover { text-decoration: underline; }
+
+  .faq-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-top: 16px; }
+  .faq-heading { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px; }
+  .faq-item { border-bottom: 1px solid var(--border-light); }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-q { font-size: 13px; font-weight: 600; padding: 14px 0; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  .faq-q::-webkit-details-marker { display: none; }
+  .faq-q::after { content: '+'; font-size: 18px; color: var(--text-muted); font-weight: 300; flex-shrink: 0; margin-left: 12px; }
+  details[open] .faq-q::after { content: '\u2212'; }
+  .faq-a { font-size: 13px; line-height: 1.7; color: var(--text-mid); padding: 0 0 14px 0; }
 
   .detail-disclaimer { text-align: center; font-size: 10px; font-family: var(--mono); color: var(--text-muted); margin-top: 16px; padding: 12px; }
 
@@ -306,10 +415,11 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
   @media (max-width: 768px) {
     .topbar { padding: 0 12px; height: 48px; }
     .page-wrap { padding: 16px 12px; }
-    .detail-card { padding: 16px; }
+    .detail-card, .faq-section { padding: 16px; }
     .detail-header { flex-direction: column; gap: 10px; }
     .detail-title { font-size: 18px; }
     .detail-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sr-columns { grid-template-columns: 1fr; gap: 12px; }
     .timeline { flex-direction: column; gap: 12px; }
     .timeline::before { top: 8px; bottom: 8px; left: 7px; width: 2px; height: auto; right: auto; }
     .timeline-item { flex-direction: row; align-items: center; gap: 10px; }
