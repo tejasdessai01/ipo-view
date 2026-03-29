@@ -2,9 +2,17 @@
   "functions": {
     "api/refresh.js": {
       "maxDuration": 120
+    },
+    "api/blog/index.js": {
+      "includeFiles": "content/blog/**"
+    },
+    "api/blog/[slug].js": {
+      "includeFiles": "content/blog/**"
     }
   },
   "rewrites": [
+    { "source": "/blog", "destination": "/api/blog" },
+    { "source": "/blog/:slug", "destination": "/api/blog/:slug" },
     { "source": "/ipo/:slug", "destination": "/api/ipo/:slug" }
   ]
 }

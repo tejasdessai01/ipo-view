@@ -7,6 +7,8 @@
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.3.0",
-    "firebase-admin": "^12.1.0"
+    "firebase-admin": "^12.1.0",
+    "marked": "^12.0.0",
+    "gray-matter": "^4.0.3"
   }
 }
