@@ -2,7 +2,8 @@
 // Thin proxy — forwards refresh requests to the Google Cloud Function
 // which has a 300s timeout (vs Vercel's 60s hobby limit).
 //
-// If REFRESH_GCF_URL is not set, falls back to running locally (original behaviour).
+// If REFRESH_GCF_URL is not set, falls back to running locally with
+// the same merge/upsert logic (never deletes old data).
 
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore }                  = require('firebase-admin/firestore');
@@ -19,6 +20,21 @@ function getDb() {
   }
   const dbId = process.env.FIRESTORE_DATABASE_ID || '(default)';
   return getFirestore(dbId);
+}
+
+function toSlug(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function mergeIpo(existing, incoming) {
+  const merged = { ...existing };
+  for (const [key, val] of Object.entries(incoming)) {
+    if ((val === null || val === undefined) && merged[key] != null) continue;
+    if (val === '' && merged[key]) continue;
+    merged[key] = val;
+  }
+  return merged;
 }
 
 module.exports = async function handler(req, res) {
@@ -42,7 +58,7 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // ── Fallback: run refresh locally (works but may timeout on Vercel Hobby) ──
+  // ── Fallback: run refresh locally ──
 
   const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY', 'ANTHROPIC_API_KEY']
     .filter(k => !process.env[k]);
@@ -73,6 +89,22 @@ module.exports = async function handler(req, res) {
     } catch (_) {}
   }
 
+  // Load existing IPOs to inform the AI and for merging
+  let existingDocs = {};
+  try {
+    const snap = await db.collection('ipos').get();
+    snap.docs.forEach(d => { existingDocs[d.id] = d.data(); });
+  } catch (_) {}
+
+  const existingNames = Object.values(existingDocs)
+    .filter(d => d.status !== 'archived')
+    .map(d => d.name)
+    .filter(Boolean);
+
+  const existingList = existingNames.length
+    ? `\n\nIMPORTANT — We already track these IPOs. Include ALL of them in your response with updated data (do NOT drop any):\n${existingNames.map(n => `- ${n}`).join('\n')}\n\nIf an IPO from this list has been listed for more than 60 days, you may omit it. Otherwise you MUST include it.`
+    : '';
+
   const today = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const prompt = `You are a financial data assistant. Today is ${today}.
@@ -80,11 +112,17 @@ module.exports = async function handler(req, res) {
 Search for the latest India IPO data and return a JSON array.
 Return ONLY a valid JSON array — no markdown, no backticks, no explanation.
 
+Search these sources for comprehensive data:
+- investorgain.com/ipo
+- chittorgarh.com/ipo
+- ipowatch.in
+- moneycontrol.com IPO section
+
 [
   {
     "name": "Company Name",
     "sector": "Sector",
-    "exchange": "NSE/BSE",
+    "exchange": "NSE" or "BSE" or "NSE/BSE",
     "status": "open" | "upcoming" | "allotment" | "listed",
     "issue_size_cr": 1234,
     "price_band": "₹100-105",
@@ -111,13 +149,14 @@ Return ONLY a valid JSON array — no markdown, no backticks, no explanation.
 ]
 
 Field guidelines:
+- status: "open" = currently accepting applications. "upcoming" = dates announced but not yet open. "allotment" = closed, allotment pending or just done, not yet listed. "listed" = trading on exchange.
 - description: Real factual info about the company — what it does, revenue, market position. No speculation.
 - ipo_score: Rate 1.0–5.0 based on: company fundamentals, sector outlook, valuation vs peers, subscription demand, GMP sentiment, promoter track record. For listed IPOs, factor in actual listing performance.
 - company_url: Official company website. null if unknown.
 - linkedin_url: Company LinkedIn page. null if unknown.
 - drhp_url: Link to DRHP/RHP on SEBI or BSE/NSE. null if unknown.
 
-Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed in the last 30 days. Aim for 15-25 entries. Real data only.`;
+Include: ALL currently open IPOs, ALL IPOs in allotment phase, ALL IPOs opening in the next 30 days, ALL IPOs listed in the last 60 days. Be thorough — do not skip any. Include both mainboard and SME IPOs. Aim for 15-30 entries.${existingList}`;
 
   let ipos;
   try {
@@ -155,38 +194,91 @@ Include: all currently open IPOs, IPOs opening in the next 30 days, IPOs listed 
     return res.status(500).json({ error: 'Anthropic fetch/parse failed', detail: err.message });
   }
 
+  // Merge/upsert into Firestore
   try {
-    const existing = await db.collection('ipos').get();
-    const delBatch = db.batch();
-    existing.docs.forEach(d => delBatch.delete(d.ref));
-    await delBatch.commit();
+    const now = new Date();
+    const seenSlugs = new Set();
+    let created = 0, updated = 0;
 
     for (let i = 0; i < ipos.length; i += 400) {
       const batch = db.batch();
-      ipos.slice(i, i + 400).forEach((ipo, j) => {
-        const slug = (ipo.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        batch.set(db.collection('ipos').doc(`ipo_${i + j}`), {
-          ...ipo,
-          slug,
-          lead_managers: Array.isArray(ipo.lead_managers) ? ipo.lead_managers : [],
-          updated_at:    new Date(),
-        });
-      });
+      for (const ipo of ipos.slice(i, i + 400)) {
+        const slug = toSlug(ipo.name);
+        if (!slug || seenSlugs.has(slug)) continue;
+        seenSlugs.add(slug);
+
+        const docRef = db.collection('ipos').doc(slug);
+        const existing = existingDocs[slug];
+
+        if (existing) {
+          const merged = mergeIpo(existing, {
+            ...ipo,
+            slug,
+            lead_managers: Array.isArray(ipo.lead_managers) ? ipo.lead_managers : (existing.lead_managers || []),
+          });
+          merged.updated_at = now;
+          merged.last_seen  = now;
+          batch.set(docRef, merged);
+          updated++;
+        } else {
+          batch.set(docRef, {
+            ...ipo,
+            slug,
+            lead_managers: Array.isArray(ipo.lead_managers) ? ipo.lead_managers : [],
+            created_at: now,
+            updated_at: now,
+            last_seen:  now,
+          });
+          created++;
+        }
+      }
       await batch.commit();
     }
 
-    await db.collection('meta').doc('last_fetch').set({
-      fetched_at: new Date(),
-      ipo_count:  ipos.length,
-    });
+    // Archive stale IPOs (not seen in 7+ days)
+    let archived = 0;
+    const archiveBatch = db.batch();
+    for (const [docId, doc] of Object.entries(existingDocs)) {
+      if (doc.status === 'archived') continue;
+      if (seenSlugs.has(docId)) continue;
+      const lastSeen = doc.last_seen?.toDate?.() || doc.updated_at?.toDate?.() || new Date(0);
+      const daysSinceLastSeen = (now - lastSeen) / 86400000;
+      if (daysSinceLastSeen >= 7) {
+        archiveBatch.update(db.collection('ipos').doc(docId), { status: 'archived', archived_at: now, updated_at: now });
+        archived++;
+      }
+    }
+    if (archived > 0) await archiveBatch.commit();
 
-    return res.json({ success: true, count: ipos.length, fetched_at: new Date().toISOString() });
+    // Migrate old ipo_N docs to slug-based IDs
+    const migrateBatch = db.batch();
+    let migrated = 0;
+    for (const [docId, doc] of Object.entries(existingDocs)) {
+      if (/^ipo_\d+$/.test(docId) && doc.name) {
+        const slug = toSlug(doc.name);
+        if (!seenSlugs.has(slug)) {
+          migrateBatch.set(db.collection('ipos').doc(slug), {
+            ...doc, slug,
+            last_seen: doc.last_seen || doc.updated_at || now,
+            created_at: doc.created_at || doc.updated_at || now,
+            updated_at: now,
+          });
+          seenSlugs.add(slug);
+          migrated++;
+        }
+        migrateBatch.delete(db.collection('ipos').doc(docId));
+      }
+    }
+    if (migrated > 0) await migrateBatch.commit();
+
+    await db.collection('meta').doc('last_fetch').set({ fetched_at: now, ipo_count: seenSlugs.size });
+
+    return res.json({ success: true, fetched_at: now.toISOString(), created, updated, archived, migrated, total: seenSlugs.size });
   } catch (err) {
     console.error('Firestore write failed:', err);
     const isNotFound = err.code === 5 || /NOT_FOUND/.test(err.message);
     const hint = isNotFound
-      ? `Firestore database not found. Ensure a Firestore database exists in project "${process.env.FIREBASE_PROJECT_ID}". ` +
-        'Create one at https://console.firebase.google.com → Firestore Database → Create database.'
+      ? `Firestore database not found. Ensure a Firestore database exists in project "${process.env.FIREBASE_PROJECT_ID}". `
       : null;
     return res.status(500).json({ error: 'Firestore write failed', detail: err.message, hint });
   }
