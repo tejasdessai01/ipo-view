@@ -310,7 +310,7 @@ function buildPage({ title, description, canonicalUrl, jsonLd, faqLd, body }) {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>${title || 'IPO Watch India'}</title>
 ${description ? `<meta name="description" content="${description}">` : ''}
 ${canonicalUrl ? `<link rel="canonical" href="${canonicalUrl}">` : ''}
@@ -334,7 +334,8 @@ ${faqLd ? `<script type="application/ld+json">${JSON.stringify(faqLd)}</script>`
     --blue: #2563eb; --blue-bg: #eff6ff; --blue-border: #bfdbfe;
     --mono: 'DM Mono', monospace; --sans: 'Sora', sans-serif;
   }
-  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; min-height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; min-height: 100vh; -webkit-text-size-adjust: 100%; }
+  a, button, summary { -webkit-tap-highlight-color: transparent; }
 
   .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; height: 52px; gap: 20px; position: sticky; top: 0; z-index: 100; }
   .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.02em; white-space: nowrap; text-decoration: none; color: var(--text); }
@@ -415,17 +416,41 @@ ${faqLd ? `<script type="application/ld+json">${JSON.stringify(faqLd)}</script>`
   @media (max-width: 768px) {
     .topbar { padding: 0 12px; height: 48px; }
     .page-wrap { padding: 16px 12px; }
-    .detail-card, .faq-section { padding: 16px; }
+    .detail-card, .faq-section { padding: 14px; }
     .detail-header { flex-direction: column; gap: 10px; }
     .detail-title { font-size: 18px; }
-    .detail-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-subtitle { font-size: 11px; }
+    .detail-desc { font-size: 13px; padding: 10px; }
+    .detail-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .detail-value { font-size: 13px; word-break: break-word; }
     .sr-columns { grid-template-columns: 1fr; gap: 12px; }
+    .sr-list li { font-size: 12px; }
     .timeline { flex-direction: column; gap: 12px; }
     .timeline::before { top: 8px; bottom: 8px; left: 7px; width: 2px; height: auto; right: auto; }
     .timeline-item { flex-direction: row; align-items: center; gap: 10px; }
     .timeline-content { text-align: left; }
     .detail-links { flex-wrap: wrap; gap: 10px; }
+    .detail-links a { padding: 8px 0; min-height: 44px; display: inline-flex; align-items: center; }
+    .faq-q { padding: 16px 0; min-height: 44px; font-size: 13px; }
+    .faq-a { font-size: 13px; }
+    .faq-heading { font-size: 15px; }
+    .back-link { padding: 8px 0; min-height: 44px; display: inline-flex; align-items: center; }
     .footer { flex-direction: column; gap: 6px; text-align: center; padding: 12px; }
+  }
+
+  /* iPhone SE / small phones */
+  @media (max-width: 375px) {
+    .detail-title { font-size: 16px; }
+    .detail-grid { gap: 8px; }
+    .detail-value { font-size: 12px; }
+    .detail-label { font-size: 8px; }
+    .sr-list li { font-size: 11px; padding: 5px 8px; }
+  }
+
+  /* Safe area for iPhone notch/home indicator */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .footer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .topbar { padding-top: env(safe-area-inset-top); }
   }
 </style>
 </head>
